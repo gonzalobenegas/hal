@@ -38,12 +38,12 @@ using namespace hal;
 
 /** Print the alignment depth wiggle for a subrange of a given sequence to
  * the output stream. */
-static void printSequence(ostream &outStream, const Sequence *sequence, const set<const Genome *> &targetSet, hal_size_t start,
+static void printSequence(ostream &outStreamNIdentical, ostream &outStreamNAligned, const Sequence *sequence, const set<const Genome *> &targetSet, hal_size_t start,
                           hal_size_t length, hal_size_t step, bool countDupes, bool noAncestors);
 
 /** If given genome-relative coordinates, map them to a series of
  * sequence subranges */
-static void printGenome(ostream &outStream, const Genome *genome, const Sequence *sequence,
+static void printGenome(ostream &outStreamNIdentical, ostream &outStreamNAligned, const Genome *genome, const Sequence *sequence,
                         const set<const Genome *> &targetSet, hal_size_t start, hal_size_t length, hal_size_t step,
                         bool countDupes, bool noAncestors);
 
@@ -55,7 +55,8 @@ static void initParser(CLParser &optionsParser) {
      * parser is by no means required however */
     optionsParser.addArgument("halPath", "input hal file");
     optionsParser.addArgument("refGenome", "reference genome to scan");
-    optionsParser.addOption("outWiggle", "output wig file (stdout if none)", "stdout");
+    optionsParser.addOption("outWiggleNIdentical", "output wig file (stdout if none)", "stdout");
+    optionsParser.addOption("outWiggleNAligned", "output wig file (stdout if none)", "stdout");
     optionsParser.addOption("refSequence", "sequence name to export ("
                                            "all sequences by default)",
                             "\"\"");
@@ -89,7 +90,8 @@ int main(int argc, char **argv) {
     initParser(optionsParser);
 
     string halPath;
-    string wigPath;
+    string wigPathNAligned;
+    string wigPathNIdentical;
     string refGenomeName;
     string rootGenomeName;
     string targetGenomes;
@@ -103,7 +105,8 @@ int main(int argc, char **argv) {
         optionsParser.parseOptions(argc, argv);
         halPath = optionsParser.getArgument<string>("halPath");
         refGenomeName = optionsParser.getArgument<string>("refGenome");
-        wigPath = optionsParser.getOption<string>("outWiggle");
+        wigPathNIdentical = optionsParser.getOption<string>("outWiggleNIdentical");
+        wigPathNAligned = optionsParser.getOption<string>("outWiggleNAligned");
         refSequenceName = optionsParser.getOption<string>("refSequence");
         start = optionsParser.getOption<hal_size_t>("start");
         length = optionsParser.getOption<hal_size_t>("length");
@@ -187,16 +190,19 @@ int main(int argc, char **argv) {
                                 refGenome->getName() + string(") is ancetral"));
         }
 
-        ofstream ofile;
-        ostream &outStream = wigPath == "stdout" ? cout : ofile;
-        if (wigPath != "stdout") {
-            ofile.open(wigPath.c_str());
-            if (!ofile) {
-                throw hal_exception(string("Error opening output file ") + wigPath);
-            }
+        ofstream ofile_n_identical;
+        ofile_n_identical.open(wigPathNIdentical.c_str());
+        if (!ofile_n_identical) {
+            throw hal_exception(string("Error opening output file ") + wigPathNIdentical);
         }
 
-        printGenome(outStream, refGenome, refSequence, targetSet, start, length, step, countDupes, noAncestors);
+        ofstream ofile_n_aligned;
+        ofile_n_aligned.open(wigPathNAligned.c_str());
+        if (!ofile_n_aligned) {
+            throw hal_exception(string("Error opening output file ") + wigPathNAligned);
+        }
+
+        printGenome(ofile_n_identical, ofile_n_aligned, refGenome, refSequence, targetSet, start, length, step, countDupes, noAncestors);
 
     } catch (hal_exception &e) {
         cerr << "hal exception caught: " << e.what() << endl;
@@ -212,8 +218,11 @@ int main(int argc, char **argv) {
 /** Given a Sequence (chromosome) and a (sequence-relative) coordinate
  * range, print the alignmability wiggle with respect to the genomes
  * in the target set */
-void printSequence(ostream &outStream, const Sequence *sequence, const set<const Genome *> &targetSet, hal_size_t start,
-                   hal_size_t length, hal_size_t step, bool countDupes, bool noAncestors) {
+void printSequence(
+    ostream &outStreamNIdentical, ostream &outStreamNAligned, const Sequence *sequence,
+    const set<const Genome *> &targetSet, hal_size_t start, hal_size_t length,
+    hal_size_t step, bool countDupes, bool noAncestors
+) {
     hal_size_t seqLen = sequence->getSequenceLength();
     if (seqLen == 0) {
         return;
@@ -252,7 +261,8 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
     // ColumnIteratorPtr colIt = sequence->getColumnIterator(&targetSet, 0, pos, last - 1, false, noAncestors);
     ColumnIteratorPtr colIt = sequence->getColumnIterator(NULL, 0, pos, last - 1, false, noAncestors, false, false, true);  // GB
     // note wig coordinates are 1-based for some reason so we shift to right
-    outStream << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
+    outStreamNIdentical << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
+    outStreamNAligned << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
 
     /** Since the column iterator stores coordinates in Genome coordinates
      * internally, we have to switch back to genome coordinates.  */
@@ -263,7 +273,9 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
     // set<const Genome *> genomeSet;
     while (pos <= last) {
         // genomeSet.clear();
-        hal_size_t count = -1;  // since we always count the reference
+        hal_size_t n_identical = -1;  // since we always count the reference
+        hal_size_t n_aligned = -1;  // since we always count the reference
+
         /** ColumnIterator::ColumnMap maps a Sequence to a list of bases
          * the bases in the map form the alignment column.  Some sequences
          * in the map can have no bases (for efficiency reasons) */
@@ -278,8 +290,9 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
             if (i->second->empty()) {
                 continue;
             }
+            n_aligned += 1;
             if (tolower(i->second->front()->getBase()) == targetNuc) {
-                count += 1;
+                n_identical += 1;
             }
             // outStream << i->first->getGenome()->getName() << " " << i->second->size() << " " << tolower(i->second->front()->getBase()) << '\n';
             // if (countDupes == true) {
@@ -297,7 +310,8 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
         // don't want to include reference base in output
         // --count;
 
-        outStream << count << '\n';
+        outStreamNIdentical << n_identical << '\n';
+        outStreamNAligned << n_aligned << '\n';
 
         /** lastColumn checks if we are at the last column (inclusive)
          * in range.  So we need to check at end of iteration instead
@@ -335,10 +349,13 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
  * for the hal::Sequence interface.  We can convert between the two by
  * adding or subtracting the sequence start position (in the example it woudl
  * be 0 for ChrA and 500 for ChrB) */
-void printGenome(ostream &outStream, const Genome *genome, const Sequence *sequence, const set<const Genome *> &targetSet,
-                 hal_size_t start, hal_size_t length, hal_size_t step, bool countDupes, bool noAncestors) {
+void printGenome(
+    ostream &outStreamNIdentical, ostream &outStreamNAligned, const Genome *genome,
+    const Sequence *sequence, const set<const Genome *> &targetSet, hal_size_t start,
+    hal_size_t length, hal_size_t step, bool countDupes, bool noAncestors
+) {
     if (sequence != NULL) {
-        printSequence(outStream, sequence, targetSet, start, length, step, countDupes, noAncestors);
+        printSequence(outStreamNIdentical, outStreamNAligned, sequence, targetSet, start, length, step, countDupes, noAncestors);
     } else {
         if (start + length > genome->getSequenceLength()) {
             throw hal_exception("Specified range [" + std::to_string(start) + "," + std::to_string(length) + "] is" +
@@ -359,7 +376,7 @@ void printGenome(ostream &outStream, const Genome *genome, const Sequence *seque
                 hal_size_t readStart = seqStart >= start ? 0 : start - seqStart;
                 hal_size_t readLen = min(seqLen - readStart, length);
                 readLen = min(readLen, length - runningLength);
-                printSequence(outStream, sequence, targetSet, readStart, readLen, step, countDupes, noAncestors);
+                printSequence(outStreamNIdentical, outStreamNAligned, sequence, targetSet, readStart, readLen, step, countDupes, noAncestors);
                 runningLength += readLen;
             }
         }
