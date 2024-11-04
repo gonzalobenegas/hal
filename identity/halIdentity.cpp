@@ -269,13 +269,12 @@ void printSequence(
     // convert to genome coordinates
     pos += sequence->getStartPosition();
     last += sequence->getStartPosition();
-    // keep track of unique genomes
-    // set<const Genome *> genomeSet;
     while (pos <= last) {
         // genomeSet.clear();
         hal_size_t n_identical = -1;  // since we always count the reference
         hal_size_t n_aligned = -1;  // since we always count the reference
 
+        const Genome *last_genome = NULL;
         /** ColumnIterator::ColumnMap maps a Sequence to a list of bases
          * the bases in the map form the alignment column.  Some sequences
          * in the map can have no bases (for efficiency reasons) */
@@ -290,25 +289,16 @@ void printSequence(
             if (i->second->empty()) {
                 continue;
             }
+            // assuming repeated genomes are adjacent (?)
+            if (i->first->getGenome() == last_genome) {
+                continue;
+            }
+            last_genome = i->first->getGenome();
             n_aligned += 1;
             if (tolower(i->second->front()->getBase()) == targetNuc) {
                 n_identical += 1;
             }
-            // outStream << i->first->getGenome()->getName() << " " << i->second->size() << " " << tolower(i->second->front()->getBase()) << '\n';
-            // if (countDupes == true) {
-            //     // countDupes enabled: we just count everything
-            //     count += i->second->size();
-            // } else if (!i->second->empty()) {
-            //     // just counting unique genomes: add it if there's at least one base
-            //     genomeSet.insert(i->first->getGenome());
-            // }
         }
-        // exit(1);
-        // if (countDupes == false) {
-        //     count = genomeSet.size();
-        // }
-        // don't want to include reference base in output
-        // --count;
 
         outStreamNIdentical << n_identical << '\n';
         outStreamNAligned << n_aligned << '\n';
