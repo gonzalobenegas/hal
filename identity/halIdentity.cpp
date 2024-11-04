@@ -242,7 +242,15 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
      * in advance when we get the iterator.  This will limit it following
      * duplications out of the desired range while we are iterating. */
     hal_size_t pos = start;
-    ColumnIteratorPtr colIt = sequence->getColumnIterator(&targetSet, 0, pos, last - 1, false, noAncestors);
+
+    // virtual ColumnIteratorPtr getColumnIterator(const std::set<const Genome *> *targets = NULL,
+    //                                         hal_size_t maxInsertLength = 0, hal_index_t position = 0,
+    //                                         hal_index_t lastPosition = NULL_INDEX, bool noDupes = false,
+    //                                         bool noAncestors = false, bool reverseStrand = false, bool unique = false,
+    //                                         bool onlyOrthologs = false) const = 0;
+
+    // ColumnIteratorPtr colIt = sequence->getColumnIterator(&targetSet, 0, pos, last - 1, false, noAncestors);
+    ColumnIteratorPtr colIt = sequence->getColumnIterator(NULL, 0, pos, last - 1, false, noAncestors, false, false, true);  // GB
     // note wig coordinates are 1-based for some reason so we shift to right
     outStream << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
 
@@ -252,30 +260,42 @@ void printSequence(ostream &outStream, const Sequence *sequence, const set<const
     pos += sequence->getStartPosition();
     last += sequence->getStartPosition();
     // keep track of unique genomes
-    set<const Genome *> genomeSet;
+    // set<const Genome *> genomeSet;
     while (pos <= last) {
-        genomeSet.clear();
-        hal_size_t count = 0;
+        // genomeSet.clear();
+        hal_size_t count = -1;  // since we always count the reference
         /** ColumnIterator::ColumnMap maps a Sequence to a list of bases
          * the bases in the map form the alignment column.  Some sequences
          * in the map can have no bases (for efficiency reasons) */
         const ColumnIterator::ColumnMap *cmap = colIt->getColumnMap();
 
+        const char targetNuc = tolower(cmap->at(sequence)->front()->getBase());
+
+        // outStream << "targetNuc: " << targetNuc << '\n';
+
         /** For every sequence in the map */
         for (ColumnIterator::ColumnMap::const_iterator i = cmap->begin(); i != cmap->end(); ++i) {
-            if (countDupes == true) {
-                // countDupes enabled: we just count everything
-                count += i->second->size();
-            } else if (!i->second->empty()) {
-                // just counting unique genomes: add it if there's at least one base
-                genomeSet.insert(i->first->getGenome());
+            if (i->second->empty()) {
+                continue;
             }
+            if (tolower(i->second->front()->getBase()) == targetNuc) {
+                count += 1;
+            }
+            // outStream << i->first->getGenome()->getName() << " " << i->second->size() << " " << tolower(i->second->front()->getBase()) << '\n';
+            // if (countDupes == true) {
+            //     // countDupes enabled: we just count everything
+            //     count += i->second->size();
+            // } else if (!i->second->empty()) {
+            //     // just counting unique genomes: add it if there's at least one base
+            //     genomeSet.insert(i->first->getGenome());
+            // }
         }
-        if (countDupes == false) {
-            count = genomeSet.size();
-        }
+        // exit(1);
+        // if (countDupes == false) {
+        //     count = genomeSet.size();
+        // }
         // don't want to include reference base in output
-        --count;
+        // --count;
 
         outStream << count << '\n';
 
