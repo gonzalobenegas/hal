@@ -259,7 +259,8 @@ void printSequence(
     //                                         bool onlyOrthologs = false) const = 0;
 
     // ColumnIteratorPtr colIt = sequence->getColumnIterator(&targetSet, 0, pos, last - 1, false, noAncestors);
-    ColumnIteratorPtr colIt = sequence->getColumnIterator(NULL, 0, pos, last - 1, false, noAncestors, false, false, true);  // GB
+    // ColumnIteratorPtr colIt = sequence->getColumnIterator(NULL, 0, pos, last - 1, false, noAncestors, false, false, true);  // GB
+    ColumnIteratorPtr colIt = sequence->getColumnIterator(&targetSet, 0, pos, last - 1, false, noAncestors, false, false, true);  // GB
     // note wig coordinates are 1-based for some reason so we shift to right
     outStreamNIdentical << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
     outStreamNAligned << "fixedStep chrom=" << sequenceName << " start=" << start + 1 << " step=" << step << "\n";
@@ -281,8 +282,6 @@ void printSequence(
         const ColumnIterator::ColumnMap *cmap = colIt->getColumnMap();
 
         const char targetNuc = tolower(cmap->at(sequence)->front()->getBase());
-
-        // outStream << "targetNuc: " << targetNuc << '\n';
 
         /** For every sequence in the map */
         for (ColumnIterator::ColumnMap::const_iterator i = cmap->begin(); i != cmap->end(); ++i) {
