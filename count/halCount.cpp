@@ -263,23 +263,23 @@ void printSequence(
         hal_size_t n_G = 0;
         hal_size_t n_T = 0;
 
-        const Genome *last_genome = NULL;
+        // keep track of unique genomes
+        set<const Genome *> visited_genomes;
         /** ColumnIterator::ColumnMap maps a Sequence to a list of bases
          * the bases in the map form the alignment column.  Some sequences
          * in the map can have no bases (for efficiency reasons) */
         const ColumnIterator::ColumnMap *cmap = colIt->getColumnMap();
-
 
         /** For every sequence in the map */
         for (ColumnIterator::ColumnMap::const_iterator i = cmap->begin(); i != cmap->end(); ++i) {
             if (i->second->empty()) {
                 continue;
             }
-            // assuming repeated genomes are adjacent (?)
-            if (i->first->getGenome() == last_genome) {
+            const Genome *curr_genome = i->first->getGenome();
+            if (visited_genomes.find(curr_genome) != visited_genomes.end()) {
                 continue;
             }
-            last_genome = i->first->getGenome();
+            visited_genomes.insert(curr_genome);
             const char nuc = toupper(i->second->front()->getBase());
             if (nuc == 'A') {
                 n_A += 1;
